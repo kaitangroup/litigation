@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TeamRole {
+  MANAGING_PARTNER
+  LAWYER
+  PARALEGAL
+  BILLING
+  ADMIN
+}
+
+enum DeadlineType {
+  COURT
+  INTERNAL
+}
+
+enum CommunicationSource {
+  CLIENT
+  OPPOSING_COUNSEL
+  COURT
+  INTERNAL
+}
+
+enum CommunicationStatus {
+  UNTRIAGED
+  ASSIGNED
+  RESPONDED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  role        TeamRole
+  active      Boolean  @default(true)
+  matters     Matter[] @relation("LeadLawyerMatters")
+  assignedTasks DelegatedTask[] @relation("AssignedTasks")
+  delegatedTasks DelegatedTask[] @relation("DelegatedBy")
+  schedules   ScheduleEntry[]
+  comments    MatterComment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Client {
+  id          String        @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  companyName String?
+  matters     Matter[]
+  tickets     TroubleTicket[]
+  invoices    Invoice[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Matter {
+  id              String           @id @default(cuid())
+  matterNumber    String           @unique
+  title           String
+  type            String
+  stage           String
+  status          String
+  clientId        String
+  leadLawyerId    String
+  client          Client           @relation(fields: [clientId], references: [id])
+  leadLawyer      TeamMember       @relation("LeadLawyerMatters", fields: [leadLawyerId], references: [id])
+  deadlines       Deadline[]
+  communications  Communication[]
+  tickets         TroubleTicket[]
+  tasks           DelegatedTask[]
+  checklistItems  ChecklistItem[]
+  comments        MatterComment[]
+  scheduleEntries ScheduleEntry[]
+  invoices        Invoice[]
+  payments        Payment[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Deadline {
+  id          String       @id @default(cuid())
+  matterId    String
+  title       String
+  dueDate     DateTime
+  type        DeadlineType
+  completed   Boolean      @default(false)
+  completedAt DateTime?
+  matter      Matter       @relation(fields: [matterId], references: [id])
+}
+
+model Communication {
+  id           String              @id @default(cuid())
+  matterId      String
+  source        CommunicationSource
+  senderName    String
+  subject       String
+  bodySummary   String?
+  receivedAt    DateTime
+  dueResponseAt DateTime?
+  status        CommunicationStatus @default(UNTRIAGED)
+  ownerId       String?
+  matter        Matter             @relation(fields: [matterId], references: [id])
+}
+
+model TroubleTicket {
+  id          String         @id @default(cuid())
+  clientId    String
+  matterId    String?
+  title       String
+  description String?
+  priority    TicketPriority @default(MEDIUM)
+  status      String
+  ownerName   String?
+  slaDueAt    DateTime?
+  client      Client         @relation(fields: [clientId], references: [id])
+  matter      Matter?        @relation(fields: [matterId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model DelegatedTask {
+  id            String      @id @default(cuid())
+  matterId       String?
+  title          String
+  description    String?
+  dueDate        DateTime?
+  status         TaskStatus @default(NOT_STARTED)
+  assigneeId     String
+  delegatedById  String
+  matter         Matter?    @relation(fields: [matterId], references: [id])
+  assignee       TeamMember @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  delegatedBy    TeamMember @relation("DelegatedBy", fields: [delegatedById], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model ChecklistItem {
+  id          String   @id @default(cuid())
+  matterId    String
+  title       String
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  matter      Matter   @relation(fields: [matterId], references: [id])
+}
+
+model MatterComment {
+  id         String     @id @default(cuid())
+  matterId    String
+  authorId    String
+  body        String
+  matter      Matter     @relation(fields: [matterId], references: [id])
+  author      TeamMember @relation(fields: [authorId], references: [id])
+  createdAt   DateTime   @default(now())
+}
+
+model ScheduleEntry {
+  id          String     @id @default(cuid())
+  matterId    String?
+  teamMemberId String
+  title       String
+  startsAt    DateTime
+  endsAt      DateTime
+  planned     Boolean    @default(true)
+  matter      Matter?    @relation(fields: [matterId], references: [id])
+  teamMember  TeamMember @relation(fields: [teamMemberId], references: [id])
+}
+
+model Invoice {
+  id               String   @id @default(cuid())
+  externalId       String?
+  clientId         String
+  matterId         String?
+  invoiceNumber    String?
+  amount           Float
+  amountPaid       Float    @default(0)
+  issuedAt         DateTime?
+  dueAt            DateTime?
+  status           String
+  quickbooksSynced Boolean  @default(false)
+  client           Client   @relation(fields: [clientId], references: [id])
+  matter           Matter?  @relation(fields: [matterId], references: [id])
+  payments         Payment[]
+}
+
+model Payment {
+  id           String    @id @default(cuid())
+  matterId     String?
+  invoiceId    String?
+  amount       Float
+  receivedAt   DateTime
+  method       String?
+  externalId   String?
+  matter       Matter?   @relation(fields: [matterId], references: [id])
+  invoice      Invoice?  @relation(fields: [invoiceId], references: [id])
+}
